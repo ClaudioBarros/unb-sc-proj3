@@ -14,6 +14,7 @@ add_compile_definitions(PROJECT_DIR=${CMAKE_SOURCE_DIR})
 # Add source to this project's executable.
 
 set(SRC_FILES
+    "rsa.cpp"
     "main.cpp"
     )
 
