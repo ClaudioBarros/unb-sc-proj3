@@ -39,7 +39,7 @@ mpz_class bytes_to_mpz(vec_u8& bytes)
 vec_u8 mpz_to_bytes(mpz_class& m)
 {
     size_t len = mpz_sizeinbase(m.get_mpz_t(), 2);
-    vec_u8 bytes(len*8, 0);
+    vec_u8 bytes(len/8, 0);
     mpz_export(&bytes[0], 0, 1, sizeof(bytes[0]), 0, 0, m.get_mpz_t());
     return bytes;
 }
@@ -269,14 +269,74 @@ void generateKeys(mpz_class& privateKey, mpz_class& publicKey, mpz_class& expone
     privateKey = d;
 }
 
-void RSA_OAEP_Enc(mpz_class& n, mpz_class& e, vec8_u& M, vec8_u& P, vec8_u& C)
+int RSA_Enc(mpz_class& n, mpz_class& e, mpz_class& m, mpz_class& c)
 {
-    
+    if(m < 0 || m > (n-1)) 
+    {
+        std::cout << "message representative out of range\n";
+        return 0;
+    }
+
+    mpz_powm_sec(c.get_mpz_t(), c.get_mpz_t(), e.get_mpz_t(), n.get_mpz_t());
+    return 1;
 }
 
-void RSA_OAEP_Dec(mpz_class& K, vec_u8& C, vec_u8& P, vec_u8& M)
+int RSA_Dec(mpz_class& n, mpz_class& d, mpz_class& c, mpz_class& m)
 {
+    if(c < 0 || c > n-1)
+    {
+        std::cout << "ciphertext representative out of range\n";
+        return 0;
+    }
+
+    mpz_powm_sec(m.get_mpz_t(), c.get_mpz_t(), d.get_mpz_t(), n.get_mpz_t());
+    return 1;
+}
+
+int RSA_OAEP_Enc(mpz_class& n, mpz_class& e, vec_u8& M, vec_u8& P, vec_u8& C)
+{
+    vec_u8 EM(0);
+
+    size_t modlen = mpz_sizeinbase(n.get_mpz_t(), 2)/8;
+    if(!OAEP_Enc(EM, M, P, modlen-1))
+        return 0;
     
+    mpz_class M_mpz = bytes_to_mpz(EM);
+    mpz_class C_mpz(0);
+
+    if(!RSA_Enc(n, e, M_mpz, C_mpz))
+        return 0;
+    
+    C.clear();
+    C = mpz_to_bytes(C_mpz);
+    return 1;
+}
+
+int RSA_OAEP_Dec(mpz_class& n, mpz_class& d, vec_u8& C, vec_u8& P, vec_u8& M)
+{
+    mpz_class clen(C.size());
+    if(clen != n) 
+    {
+        std::cout << "ciphertext length in bytes does not match modulus length in bytes\n";
+        return 0;
+    } 
+
+    mpz_class C_mpz = bytes_to_mpz(C);
+    mpz_class EM_mpz(0);
+    if(!RSA_Dec(n, d, C_mpz, EM_mpz))
+    {
+        std::cout << "decryption error\n";
+        return 0;
+    }
+
+    vec_u8 EM = mpz_to_bytes(EM_mpz);
+    if(!OAEP_Dec(M, EM, P))
+    {
+        std::cout << "decryption error\n";
+        return 0;
+    }
+
+    return 1;
 }
 
 int main() {
