@@ -9,6 +9,14 @@
 
 #define HASH_MAX_INPUT 2305843009213693951ull //2^61 - 1
 
+size_t mpz_size_in_bytes(mpz_class& n)
+{
+    size_t len = mpz_sizeinbase(n.get_mpz_t(), 2);
+    size_t len_bytes = len / 8;
+    if(len%8 > 0) len_bytes += 1;
+    return len_bytes;
+}
+
 bool comp_bytes(vec_u8& a, vec_u8& b)
 {
     if(a.size() != b.size())
@@ -31,8 +39,8 @@ mpz_class bytes_to_mpz(vec_u8& bytes)
 
 vec_u8 mpz_to_bytes(mpz_class& m)
 {
-    size_t len = mpz_sizeinbase(m.get_mpz_t(), 2);
-    vec_u8 bytes(len/8, 0);
+    size_t len = mpz_size_in_bytes(m);
+    vec_u8 bytes(len, 0);
     mpz_export(&bytes[0], 0, 1, sizeof(bytes[0]), 0, 0, m.get_mpz_t());
     return bytes;
 }
@@ -125,7 +133,9 @@ void generateKeys(mpz_class& privateKey, mpz_class& publicKey, mpz_class& expone
 
 int RSA_Enc(mpz_class& n, mpz_class& e, mpz_class& m, mpz_class& c)
 {
-    if(m < 0 || m > (n-1)) 
+    int cmp1 = cmp(m, (n-1));
+    int cmp2 = cmp(m, 0);
+    if(cmp1 > 0 || cmp2 < 0) //if m < 0 or m > n -1 
     {
         std::cout << "message representative out of range\n";
         return 0;
@@ -137,7 +147,9 @@ int RSA_Enc(mpz_class& n, mpz_class& e, mpz_class& m, mpz_class& c)
 
 int RSA_Dec(mpz_class& n, mpz_class& d, mpz_class& c, mpz_class& m)
 {
-    if(c < 0 || c > n-1)
+    int cmp1 = cmp(c, (n-1));
+    int cmp2 = cmp(c, 0);
+    if(cmp1 > 0 || cmp2 < 0) //if c < 0 or c > n -1 
     {
         std::cout << "ciphertext representative out of range\n";
         return 0;
@@ -171,14 +183,14 @@ int MGF1(vec_u8& output, vec_u8 &seed, uint64_t maskLen)
 
 int OAEP_Enc(vec_u8& EM, vec_u8& M, vec_u8& P,  uint64_t len)
 {
-    if(M.size() > (len - 2*HASH_LEN - 1))
-    {
-        std::cout << "[OAEP_Enc] message too long\n";
-        return 0;
-    }
     if(P.size() > HASH_MAX_INPUT)
     {
         std::cout << "[OAEP_Enc] parameter string too long\n";
+        return 0;
+    }
+    if(M.size() > (len - 2*HASH_LEN - 1))
+    {
+        std::cout << "[OAEP_Enc] message too long\n";
         return 0;
     }
     
@@ -186,7 +198,7 @@ int OAEP_Enc(vec_u8& EM, vec_u8& M, vec_u8& P,  uint64_t len)
     vec_u8 PS((psLen > 0 ? psLen : 0), 0);
     
     vec_u8 pHash(HASH_LEN, 0);
-    SHA1(&PS[0], PS.size(), &pHash[0]);
+    SHA1(&P[0], P.size(), &pHash[0]);
 
     vec_u8 DB = concat_bytes(pHash, PS);
     DB.push_back(0x01);
@@ -308,7 +320,8 @@ int RSA_OAEP_Enc(mpz_class& n, mpz_class& e, vec_u8& M, vec_u8& P, vec_u8& C)
 {
     vec_u8 EM(0);
 
-    size_t modlen = mpz_sizeinbase(n.get_mpz_t(), 2)/8;
+    size_t modlen = mpz_size_in_bytes(n);
+
     if(!OAEP_Enc(EM, M, P, modlen-1))
         return 0;
     
@@ -325,8 +338,9 @@ int RSA_OAEP_Enc(mpz_class& n, mpz_class& e, vec_u8& M, vec_u8& P, vec_u8& C)
 
 int RSA_OAEP_Dec(mpz_class& n, mpz_class& d, vec_u8& C, vec_u8& P, vec_u8& M)
 {
-    mpz_class clen(C.size());
-    if(clen != n) 
+    size_t modlen = mpz_size_in_bytes(n);
+
+    if(C.size() != modlen) 
     {
         std::cout << "[RSA_OAEP_Dec] ciphertext length in bytes does not match modulus length in bytes\n";
         return 0;
